@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MeshCat Desktop Mock Test</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #111; color: white; font-family: sans-serif; }
+        #meshcat-viewer { width: 100vw; height: 100vh; }
+        #info {
+            position: absolute; top: 10px; left: 10px; 
+            background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px;
+            pointer-events: none; z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <h1>Desktop Mock Viewer</h1>
+        <p>Viewing XR Overlay on Laptop/Phone</p>
+        <p>1. Start Drake simulation: <code>python3 test/drake_sim.py</code></p>
+        <p>2. Simulation URL: <code id="sim-url">ws://localhost:7000</code></p>
+    </div>
+    <div id="meshcat-viewer"></div>
+
+    <script type="module">
+        import { Viewer, THREE } from '../src/index.js';
+
+        document.addEventListener("DOMContentLoaded", () => {
+            const container = document.getElementById("meshcat-viewer");
+            const viewer = new Viewer(container);
+
+            // 1. Enable Desktop Mock Mode (Configures camera, lights, and hands)
+            viewer.xr_manager.enableDesktopMock();
+
+            // 2. Connect to Simulation (Defaults to window.hostname:7000 if no param)
+            const params = new URLSearchParams(window.location.search);
+            const simUrl = params.get('url');
+            if (simUrl) document.getElementById('sim-url').innerText = simUrl;
+            
+            viewer.connect(simUrl);
+
+            // Set perspective camera to a good observer position
+            viewer.camera.position.set(1.5, 1, 1.5);
+            viewer.camera.lookAt(0, 0.5, 0);
+        });
+    </script>
+</body>
+</html>

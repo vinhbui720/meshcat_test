@@ -1,6 +1,8 @@
 import * as THREE from 'three';
-var msgpack = require('@msgpack/msgpack');
-var dat = require('dat.gui').default; // TODO: why is .default needed?
+import * as msgpack from '@msgpack/msgpack';
+import * as dat_module from 'dat.gui';
+// dat.gui may export GUI on .default or directly — handle both
+const dat = dat_module.default || dat_module;
 import {mergeGeometries} from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {OBJLoader2, MtlObjBridge} from 'wwobjloader2'
 import {ColladaLoader} from 'three/examples/jsm/loaders/ColladaLoader.js';
@@ -18,7 +20,8 @@ import {Line2} from 'three/examples/jsm/lines/Line2.js';
 import {LineMaterial} from 'three/examples/jsm/lines/LineMaterial.js';
 import {LineGeometry} from 'three/examples/jsm/lines/LineGeometry.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
-require('ccapture.js');
+import { XRManager } from './xr/xr-manager.js';
+import 'ccapture.js';
 
 // These are bundled as data:// URIs via our webpack.config.js.
 const meshcat_inline_assets = {
@@ -1331,8 +1334,9 @@ class Viewer {
         window.addEventListener('keydown', (evt) => {this.on_keydown(evt);});
 
         requestAnimationFrame(() => this.set_3d_pane_size());
+        this.xr_manager = new XRManager(this);
         if (animate || animate === undefined) {
-            this.animate();
+            this.setup_animate();
         }
     }
 
@@ -1537,11 +1541,18 @@ class Viewer {
         this.needs_render = false;
     }
 
-    animate() {
-        requestAnimationFrame(() => this.animate());
+    setup_animate() {
+        this.renderer.setAnimationLoop((time, frame) => this.animate(time, frame));
+    }
+
+    animate(time, frame) {
         this.animator.update();
-        if (this.needs_render) {
+        if (this.needs_render || (this.renderer.xr && this.renderer.xr.isPresenting) || (this.xr_manager && this.xr_manager.desktopMock)) {
             this.render();
+            if (this.xr_manager) {
+                // If presenting, frame is provided by XR. If not, frame will be null (handled in xr_manager)
+                this.xr_manager.update(frame);
+            }
         }
     }
 
@@ -1852,12 +1863,17 @@ class Viewer {
     }
 
     connect(url) {
-        if (url === undefined) {
-            url = `ws://${location.host}`;
+        if (!url) {
+            // Default to port 7000 on the same host (typical Drake/Meshcat setup)
+            url = "ws://" + window.location.hostname + ":7000";
         }
+        
+        // Handle https -> wss conversion
         if (location.protocol == "https:") {
             url = url.replace("ws:", "wss:");
         }
+
+        console.log("MeshCat connecting to:", url);
         this.connection = new WebSocket(url);
         this.connection.binaryType = "arraybuffer";
         this.connection.onmessage = (msg) => this.handle_command_message(msg);
@@ -2070,17 +2086,18 @@ class Viewer {
             this.camera.updateProjectionMatrix = () => {
                 console.warn("Updating the camera projection matrix is disallowed in immersive mode.");
             };
-            this.renderer.setAnimationLoop(() => {
-                this.renderer.render(this.scene, this.camera);
-            });
         });
+
+        // Hide XR buttons if we are in Mock mode to avoid confusing "not available" messages
+        if (this.xr_manager && this.xr_manager.desktopMock) {
+            this.update_webxr_buttons(); // Refresh UI
+        }
 
         this.renderer.xr.addEventListener('sessionend', () => {
             this.webxr_session_active = false;
             if (mode == "ar"){
                 this.set_property(["Background"], "use_ar_background", false);
             }
-            this.renderer.setAnimationLoop(null); // Reset the animation loop to its default state (null).
             this.camera.updateProjectionMatrix = original_update_projection_matrix;
         });
     }

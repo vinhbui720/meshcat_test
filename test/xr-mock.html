@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MeshCat XR Mock Test</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #111; color: white; font-family: sans-serif; }
+        #meshcat-viewer { width: 100vw; height: 100vh; }
+        #info {
+            position: absolute; top: 10px; left: 10px; 
+            background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px;
+            pointer-events: none; z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <h1>MeshCat XR Overlay</h1>
+        <p>1. Start Drake simulation: <code>python3 test/drake_sim.py</code></p>
+        <p>2. Connect Quest 3 via USB & run: <code>adb reverse tcp:5173 tcp:5173 && adb reverse tcp:7000 tcp:7000</code></p>
+        <p>3. Open: <code>https://localhost:5173/test/xr-mock.html?url=ws://localhost:7000</code></p>
+    </div>
+    <div id="meshcat-viewer"></div>
+
+    <script type="module">
+        import { Viewer, THREE } from '../src/index.js';
+
+        document.addEventListener("DOMContentLoaded", () => {
+            const container = document.getElementById("meshcat-viewer");
+            const viewer = new Viewer(container);
+
+            // Add simple test objects (The "Mock" robot)
+            const scene = viewer.scene;
+            
+            // Central "Base"
+            const baseGeo = new THREE.BoxGeometry(0.2, 0.1, 0.2);
+            const baseMat = new THREE.MeshPhongMaterial({ color: 0x444444 });
+            const base = new THREE.Mesh(baseGeo, baseMat);
+            base.position.set(0, 0.05, 0);
+            scene.add(base);
+
+            // "Link 1"
+            const link1Geo = new THREE.CylinderGeometry(0.05, 0.05, 0.3);
+            const link1Mat = new THREE.MeshPhongMaterial({ color: 0xff4444 });
+            const link1 = new THREE.Mesh(link1Geo, link1Mat);
+            link1.position.set(0, 0.2, 0);
+            scene.add(link1);
+
+            // "Link 2"
+            const link2Geo = new THREE.SphereGeometry(0.06);
+            const link2Mat = new THREE.MeshPhongMaterial({ color: 0x44ff44 });
+            const link2 = new THREE.Mesh(link2Geo, link2Mat);
+            link2.position.set(0, 0.4, 0);
+            scene.add(link2);
+
+            // Add some lights
+            const light = new THREE.DirectionalLight(0xffffff, 1);
+            light.position.set(1, 1, 1);
+            scene.add(light);
+
+            // 1. Connect to Simulation if URL is provided
+            const params = new URLSearchParams(window.location.search);
+            const simUrl = params.get('url') || 'ws://localhost:7000';
+            if (simUrl) {
+                console.log("Connecting to Drake Simulation at:", simUrl);
+                viewer.connect(simUrl);
+            }
+
+            // 2. Enable WebXR with AR preference for Passthrough
+            viewer.handle_command({
+                type: "enable_webxr",
+                mode: "ar"
+            });
+
+            // Simulate some movement to verify the loop
+            let angle = 0;
+            viewer.renderer.setAnimationLoop((time, frame) => {
+                angle += 0.01;
+                link1.rotation.y = angle;
+                link2.position.x = Math.sin(angle) * 0.2;
+                
+                // Existing viewer animate call
+                viewer.animate(time, frame);
+            });
+        });
+    </script>
+</body>
+</html>
