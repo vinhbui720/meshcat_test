@@ -3,44 +3,397 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MeshCat Desktop Mock Test</title>
+    <title>MeshCat XR — Drake Monitor</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #111; color: white; font-family: sans-serif; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { overflow: hidden; background: #07080f; color: #ddd;
+               font-family: 'Segoe UI', system-ui, sans-serif; }
         #meshcat-viewer { width: 100vw; height: 100vh; }
+
+        /* ══════════════════════════════════════════════════
+           Info panel (top-left)
+        ══════════════════════════════════════════════════ */
         #info {
-            position: absolute; top: 10px; left: 10px; 
-            background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px;
-            pointer-events: none; z-index: 10;
+            position: fixed; top: 12px; left: 12px;
+            background: rgba(6,8,20,0.88);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.09);
+            padding: 14px 18px; border-radius: 12px;
+            z-index: 20; min-width: 330px; max-width: 430px;
+            font-size: 13px; line-height: 1.65;
         }
+        #info h2 {
+            font-size: 14px; color: #7af; letter-spacing: .5px;
+            margin-bottom: 10px;
+            display: flex; align-items: center; gap: 7px;
+        }
+
+        /* ── Drake row ── */
+        .row { display: flex; align-items: baseline; gap: 6px; font-size: 12px; color: #999; }
+        .row strong { color: #bbb; }
+        #drake-url-display { color: #7cf; word-break: break-all; font-size: 11.5px; }
+
+        /* ── Status ── */
+        #status-row { margin-top: 10px; display: flex; align-items: center; gap: 8px; }
+        #status-dot {
+            width: 9px; height: 9px; border-radius: 50%;
+            background: #555; flex-shrink: 0; transition: background .4s, box-shadow .4s;
+        }
+        #status-dot.connected  { background: #3fa; box-shadow: 0 0 7px #3fa9; }
+        #status-dot.error      { background: #f44; box-shadow: 0 0 7px #f449; }
+        #status-dot.connecting { background: #fb3; animation: blink 1s infinite; }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.15} }
+        #status-text { font-size: 12px; color: #ccc; }
+
+        /* ── Counters ── */
+        #counters { margin-top: 6px; font-size: 11px; color: #666; }
+        #counters span { color: #999; }
+
+        /* ── HTTPS warning ── */
+        #https-warn {
+            display: none; margin-top: 10px; padding: 7px 10px;
+            background: rgba(255,120,0,.13); border: 1px solid rgba(255,130,0,.3);
+            border-radius: 6px; font-size: 11.5px; color: #fb4;
+        }
+
+        /* ── Reconnect button ── */
+        #btn-reconnect {
+            margin-top: 10px; width: 100%;
+            padding: 6px 0; border-radius: 6px;
+            background: rgba(80,140,255,.11); border: 1px solid rgba(80,140,255,.28);
+            color: #7af; font-size: 12px; cursor: pointer; transition: background .2s;
+        }
+        #btn-reconnect:hover { background: rgba(80,140,255,.24); }
+
+        /* ── Event log ── */
+        #event-log-wrap {
+            margin-top: 11px;
+            border-top: 1px solid rgba(255,255,255,.07);
+            padding-top: 8px;
+        }
+        #event-log-title { font-size: 11px; color: #556; letter-spacing: .4px; margin-bottom: 5px; }
+        #event-log {
+            max-height: 130px; overflow-y: auto;
+            display: flex; flex-direction: column; gap: 3px;
+        }
+        #event-log::-webkit-scrollbar { width: 4px; }
+        #event-log::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+        .log-entry {
+            font-size: 11px; padding: 3px 7px; border-radius: 5px;
+            border-left: 3px solid #333; background: rgba(255,255,255,.03);
+            animation: fadeIn .3s ease;
+        }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:none} }
+        .log-entry.ok     { border-color: #3fa; color: #9ef; }
+        .log-entry.err    { border-color: #f44; color: #faa; }
+        .log-entry.warn   { border-color: #fb3; color: #fda; }
+        .log-entry.client { border-color: #a7f; color: #caf; }
+        .log-entry .ts    { color: #555; font-size: 10px; margin-right: 5px; }
+
+        /* ══════════════════════════════════════════════════
+           Client count badge (top-right)
+        ══════════════════════════════════════════════════ */
+        #client-badge {
+            position: fixed; top: 12px; right: 12px;
+            background: rgba(6,8,20,.88); backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,.09); border-radius: 10px;
+            padding: 10px 16px; z-index: 20; font-size: 12px;
+            display: flex; flex-direction: column; align-items: center; gap: 4px;
+        }
+        #client-badge .lbl { font-size: 10px; color: #556; letter-spacing: .5px; }
+        #client-count { font-size: 24px; font-weight: 700; color: #a7f;
+                        line-height: 1; transition: transform .3s; }
+        #client-count.bump { animation: bump .3s ease; }
+        @keyframes bump { 0%{transform:scale(1)} 50%{transform:scale(1.4)} 100%{transform:scale(1)} }
+
+        /* ══════════════════════════════════════════════════
+           Toast notifications
+        ══════════════════════════════════════════════════ */
+        #toast-stack {
+            position: fixed; bottom: 18px; right: 12px;
+            display: flex; flex-direction: column-reverse; gap: 8px;
+            z-index: 100; pointer-events: none;
+            width: 320px;
+        }
+        .toast {
+            padding: 10px 16px; border-radius: 10px;
+            font-size: 12px; line-height: 1.5;
+            border-left: 4px solid #555;
+            background: rgba(8,10,24,.92); backdrop-filter: blur(8px);
+            animation: toastIn .35s cubic-bezier(.22,1,.36,1) both;
+            transition: opacity .4s, transform .4s;
+        }
+        .toast.hiding { opacity: 0; transform: translateX(30px); }
+        @keyframes toastIn { from{opacity:0;transform:translateX(30px)} to{opacity:1;transform:none} }
+        .toast.ok     { border-color: #3fa; }
+        .toast.err    { border-color: #f44; }
+        .toast.warn   { border-color: #fb3; }
+        .toast.client { border-color: #a7f; }
+        .toast-icon   { font-size: 14px; margin-right: 6px; }
+        .toast-title  { font-weight: 600; color: #ddd; }
+        .toast-body   { color: #999; font-size: 11px; margin-top: 2px; }
     </style>
 </head>
 <body>
-    <div id="info">
-        <h1>Desktop Mock Viewer</h1>
-        <p>Viewing XR Overlay on Laptop/Phone</p>
-        <p>1. Start Drake simulation: <code>python3 test/drake_sim.py</code></p>
-        <p>2. Simulation URL: <code id="sim-url">ws://localhost:7000</code></p>
-    </div>
     <div id="meshcat-viewer"></div>
+
+    <!-- ── Info panel ─────────────────────────────── -->
+    <div id="info">
+        <h2>🤖 MeshCat XR — Drake Monitor</h2>
+
+        <div class="row"><strong>Drake&nbsp;URL:</strong> <span id="drake-url-display">—</span></div>
+        <div class="row"><strong>Protocol:</strong> <code id="proto-display">—</code></div>
+
+        <div id="https-warn">
+            ⚠️ Page is <strong>HTTPS</strong>. Drake uses plain <code>ws://</code>.<br>
+            Mixed-content is blocked → Fix: <code>NOTLS=1 npm run dev</code>
+        </div>
+
+        <div id="status-row">
+            <div id="status-dot" class="connecting"></div>
+            <div id="status-text">Connecting to Drake…</div>
+        </div>
+
+        <div id="counters">
+            Drake msgs: <span id="msg-count">0</span>
+            &nbsp;·&nbsp; Connected: <span id="uptime-display">—</span>
+        </div>
+
+        <button id="btn-reconnect">🔄 Reconnect to Drake</button>
+
+        <!-- Event log ── -->
+        <div id="event-log-wrap">
+            <div id="event-log-title">EVENT LOG</div>
+            <div id="event-log"></div>
+        </div>
+    </div>
+
+    <!-- ── Client count badge ──────────────────────── -->
+    <div id="client-badge">
+        <div class="lbl">CLIENTS</div>
+        <div id="client-count">1</div>
+        <div class="lbl" id="client-label">this tab</div>
+    </div>
+
+    <!-- ── Toast container ────────────────────────── -->
+    <div id="toast-stack"></div>
 
     <script type="module">
         import { Viewer, THREE } from '../src/index.js';
 
-        document.addEventListener("DOMContentLoaded", () => {
-            const container = document.getElementById("meshcat-viewer");
+        /* ════════════════════════════════════════════════════════════════
+           TOAST & LOG SYSTEM
+        ════════════════════════════════════════════════════════════════ */
+        const toastStack = document.getElementById('toast-stack');
+        const eventLog   = document.getElementById('event-log');
+
+        /**
+         * showToast(kind, icon, title, body, ms)
+         *   kind: 'ok' | 'err' | 'warn' | 'client'
+         */
+        function showToast(kind, icon, title, body, ms = 4000) {
+            const t = document.createElement('div');
+            t.className = `toast ${kind}`;
+            t.innerHTML = `
+                <div><span class="toast-icon">${icon}</span><span class="toast-title">${title}</span></div>
+                ${body ? `<div class="toast-body">${body}</div>` : ''}`;
+            toastStack.prepend(t);
+            // auto-dismiss
+            setTimeout(() => {
+                t.classList.add('hiding');
+                setTimeout(() => t.remove(), 420);
+            }, ms);
+        }
+
+        /**
+         * addLog(kind, msg)
+         *   kind: 'ok' | 'err' | 'warn' | 'client'
+         */
+        function addLog(kind, msg) {
+            const now = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${kind}`;
+            entry.innerHTML = `<span class="ts">${now}</span>${msg}`;
+            eventLog.prepend(entry);          // newest on top
+            // Keep max 30 entries
+            while (eventLog.children.length > 30) eventLog.lastChild.remove();
+        }
+
+        /* ════════════════════════════════════════════════════════════════
+           CLIENT TRACKER  (BroadcastChannel — tracks tabs on same origin)
+        ════════════════════════════════════════════════════════════════ */
+        const clientCountEl = document.getElementById('client-count');
+        const clientLabelEl = document.getElementById('client-label');
+        let clientCount = 1;           // starts at 1 (this tab)
+        const MY_ID = crypto.randomUUID();   // stable per-tab ID
+        const knownClients = new Set([MY_ID]);
+
+        const bc = new BroadcastChannel('meshcat-xr-clients');
+
+        function updateClientUI() {
+            clientCountEl.textContent = knownClients.size;
+            clientLabelEl.textContent = knownClients.size === 1 ? 'this tab' : 'tabs open';
+            // bump animation
+            clientCountEl.classList.remove('bump');
+            void clientCountEl.offsetWidth;  // reflow
+            clientCountEl.classList.add('bump');
+        }
+
+        // Tell everyone we just opened
+        bc.postMessage({ type: 'hello', id: MY_ID });
+
+        bc.addEventListener('message', (e) => {
+            const { type, id } = e.data;
+            if (type === 'hello') {
+                // A new tab opened — add it and reply so it knows we exist
+                if (!knownClients.has(id)) {
+                    knownClients.add(id);
+                    updateClientUI();
+                    const msg = `New viewer tab opened (${knownClients.size} total)`;
+                    showToast('client', '👁️', 'Client Connected', msg, 3500);
+                    addLog('client', `👁️ ${msg}`);
+                    console.log(`%c[Clients] ${msg}`, 'color:#a7f');
+                }
+                // Reply so the newcomer knows about US
+                bc.postMessage({ type: 'ack', id: MY_ID });
+            } else if (type === 'ack') {
+                if (!knownClients.has(id)) {
+                    knownClients.add(id);
+                    updateClientUI();
+                }
+            } else if (type === 'bye') {
+                if (knownClients.has(id)) {
+                    knownClients.delete(id);
+                    updateClientUI();
+                    const msg = `Viewer tab closed (${knownClients.size} remaining)`;
+                    showToast('warn', '👁️', 'Client Disconnected', msg, 3000);
+                    addLog('warn', `👁️ ${msg}`);
+                    console.log(`%c[Clients] ${msg}`, 'color:#fb3');
+                }
+            }
+        });
+
+        // Notify others when this tab closes
+        window.addEventListener('beforeunload', () => {
+            bc.postMessage({ type: 'bye', id: MY_ID });
+        });
+
+        /* ════════════════════════════════════════════════════════════════
+           HELPERS
+        ════════════════════════════════════════════════════════════════ */
+        const dot          = document.getElementById('status-dot');
+        const statusTxt    = document.getElementById('status-text');
+        const msgCountEl   = document.getElementById('msg-count');
+        const uptimeEl     = document.getElementById('uptime-display');
+        const httpsWarn    = document.getElementById('https-warn');
+        const urlDisplay   = document.getElementById('drake-url-display');
+        const protoDisplay = document.getElementById('proto-display');
+
+        function setStatus(cls, msg) {
+            dot.className = cls;
+            statusTxt.textContent = msg;
+        }
+
+        // ── HTTPS check ──
+        protoDisplay.textContent = location.protocol;
+        if (location.protocol === 'https:') {
+            httpsWarn.style.display = 'block';
+            addLog('warn', '⚠️ HTTPS detected — Drake ws:// may be blocked');
+        }
+
+        // ── Drake URL ──
+        const params = new URLSearchParams(window.location.search);
+        const simUrl  = params.get('url') || ('ws://' + window.location.hostname + ':7000');
+        urlDisplay.textContent = simUrl;
+
+        console.log('%c[Drake Monitor] Target URL:', 'color:#7af', simUrl);
+        console.log('%c[Drake Monitor] Protocol:', 'color:#7af', location.protocol);
+
+        /* ════════════════════════════════════════════════════════════════
+           VIEWER + DRAKE CONNECTION
+        ════════════════════════════════════════════════════════════════ */
+        document.addEventListener('DOMContentLoaded', () => {
+            const container = document.getElementById('meshcat-viewer');
             const viewer = new Viewer(container);
 
-            // 1. Enable Desktop Mock Mode (Configures camera, lights, and hands)
             viewer.xr_manager.enableDesktopMock();
 
-            // 2. Connect to Simulation (Defaults to window.hostname:7000 if no param)
-            const params = new URLSearchParams(window.location.search);
-            const simUrl = params.get('url');
-            if (simUrl) document.getElementById('sim-url').innerText = simUrl;
-            
+            // ── Patch _setStatus to drive toasts + log ──
+            let connectedAt = null;
+            const _orig = viewer._setStatus.bind(viewer);
+
+            viewer._setStatus = (text, color) => {
+                _orig(text, color);          // update bottom-left badge in index.js
+
+                if (color === '#4f8') {
+                    // CONNECTED ✅
+                    setStatus('connected', `Connected to Drake`);
+                    if (!connectedAt) {
+                        connectedAt = Date.now();
+                        const msg = simUrl;
+                        showToast('ok', '✅', 'Drake Connected!', msg, 5000);
+                        addLog('ok', `✅ Drake connected → ${msg}`);
+                        console.log('%c[Drake] ✅ CONNECTED', 'color:#3fa;font-weight:bold', simUrl);
+                    }
+
+                } else if (color === '#f55') {
+                    // ERROR ❌
+                    connectedAt = null;
+                    setStatus('error', `Connection failed`);
+                    showToast('err', '❌', 'Drake Connection Error',
+                              'No response from ws:// server. Is franka_visualizer running?', 6000);
+                    addLog('err', `❌ Drake connection error — ${simUrl}`);
+                    console.error('[Drake] ❌ CONNECTION ERROR', simUrl);
+
+                } else {
+                    // RECONNECTING 🔄
+                    const prev = connectedAt;
+                    connectedAt = null;
+                    setStatus('connecting', text.replace(/^[^\s]+ /, ''));
+                    if (prev) {
+                        const dur = ((Date.now() - prev) / 1000).toFixed(0);
+                        showToast('warn', '🔴', 'Drake Disconnected',
+                                  `Was connected for ${dur}s. Reconnecting…`, 5000);
+                        addLog('warn', `🔴 Drake disconnected after ${dur}s`);
+                    } else {
+                        addLog('warn', `🔄 ${text}`);
+                    }
+                }
+
+                // Always update message count
+                msgCountEl.textContent = viewer.num_messages_received;
+            };
+
+            // ── Live counters ──
+            setInterval(() => {
+                msgCountEl.textContent = viewer.num_messages_received;
+                if (connectedAt) {
+                    const s = Math.round((Date.now() - connectedAt) / 1000);
+                    uptimeEl.textContent = `${s}s`;
+                } else {
+                    uptimeEl.textContent = '—';
+                }
+            }, 500);
+
+            // ── Reconnect button ──
+            document.getElementById('btn-reconnect').addEventListener('click', () => {
+                addLog('warn', '🔄 Manual reconnect triggered');
+                setStatus('connecting', 'Connecting to Drake…');
+                if (viewer.connection) {
+                    viewer.connection.onclose = null;
+                    viewer.connection.close();
+                }
+                viewer._drakeReconnectDelay = 1000;
+                viewer.connect(simUrl);
+            });
+
+            // ── Initial log entries ──
+            addLog('warn', `🔌 Connecting to ${simUrl}…`);
+
+            // ── Connect to Drake ──
             viewer.connect(simUrl);
 
-            // Set perspective camera to a good observer position
+            // ── Camera ──
             viewer.camera.position.set(1.5, 1, 1.5);
             viewer.camera.lookAt(0, 0.5, 0);
         });

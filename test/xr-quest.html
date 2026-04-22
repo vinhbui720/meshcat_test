@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MeshCat XR — Meta Quest 3</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            overflow: hidden;
+            background: #06070f;
+            color: #dde;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        #meshcat-viewer { width: 100vw; height: 100vh; }
+
+        /* ════════════════════════════════════
+           XR BUTTON  (override Three.js style)
+        ════════════════════════════════════ */
+        #XRButton, #VRButton {
+            position: fixed !important;
+            bottom: 28px !important;
+            left: 50% !important;
+            transform: translateX(-50%) !important;
+            padding: 14px 34px !important;
+            font-size: 16px !important;
+            font-weight: 600 !important;
+            border-radius: 50px !important;
+            border: 1.5px solid rgba(160,200,255,0.4) !important;
+            background: rgba(20,30,70,0.85) !important;
+            color: #b8d8ff !important;
+            letter-spacing: .5px !important;
+            cursor: pointer !important;
+            backdrop-filter: blur(10px) !important;
+            box-shadow: 0 0 30px rgba(80,140,255,0.15) !important;
+            transition: all .2s !important;
+            z-index: 50 !important;
+        }
+        #XRButton:hover, #VRButton:hover {
+            background: rgba(60,90,180,0.85) !important;
+            box-shadow: 0 0 40px rgba(80,140,255,0.3) !important;
+        }
+
+        /* ════════════════════════════════════
+           STATUS PANEL  (top-left)
+        ════════════════════════════════════ */
+        #panel {
+            position: fixed; top: 14px; left: 14px;
+            background: rgba(5,7,18,0.90);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 14px;
+            padding: 14px 18px;
+            z-index: 30;
+            width: 310px;
+            font-size: 12.5px; line-height: 1.6;
+        }
+        #panel h2 {
+            font-size: 13.5px; color: #8bceff; letter-spacing: .6px;
+            margin-bottom: 10px;
+            display: flex; align-items: center; gap: 6px;
+        }
+        #panel .divider {
+            border: none; border-top: 1px solid rgba(255,255,255,.07);
+            margin: 9px 0;
+        }
+
+        /* ── rows ── */
+        .info-row {
+            display: flex; justify-content: space-between;
+            align-items: center; gap: 6px;
+            font-size: 11.5px; color: #778;
+        }
+        .info-row .val { color: #aac; font-family: monospace; font-size: 11px; }
+
+        /* ── Drake status dot ── */
+        #drake-row { margin-top: 8px; display: flex; align-items: center; gap: 8px; }
+        #drake-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: #444; flex-shrink: 0; transition: all .4s;
+        }
+        #drake-dot.connected  { background: #3fa; box-shadow: 0 0 8px #3fa8; }
+        #drake-dot.error      { background: #f44; box-shadow: 0 0 8px #f448; }
+        #drake-dot.connecting { background: #fb3; animation: blink 1s step-end infinite; }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.1} }
+        #drake-status-text { font-size: 11.5px; color: #cce; }
+
+        /* ── Hand tracking badges ── */
+        #hand-row {
+            display: flex; gap: 7px; margin-top: 9px;
+        }
+        .hand-badge {
+            flex: 1; padding: 5px 8px; border-radius: 8px;
+            background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08);
+            font-size: 11px; text-align: center; color: #667;
+            transition: all .3s;
+        }
+        .hand-badge.active {
+            border-color: rgba(120,220,160,.4);
+            color: #9de;
+            background: rgba(60,160,100,.12);
+        }
+        .hand-badge .hname { font-size: 10px; letter-spacing: .4px; color: #556; }
+
+        /* ── Reconnect btn ── */
+        #btn-reconnect {
+            margin-top: 10px; width: 100%;
+            padding: 5px 0; border-radius: 7px;
+            background: rgba(70,120,230,.1); border: 1px solid rgba(70,120,230,.25);
+            color: #7af; font-size: 11.5px; cursor: pointer;
+            transition: background .2s; letter-spacing: .2px;
+        }
+        #btn-reconnect:hover { background: rgba(70,120,230,.22); }
+
+        /* ── Event log ── */
+        #log-title { font-size: 10px; color: #445; letter-spacing: .5px; margin-top: 11px; margin-bottom: 4px; }
+        #event-log {
+            max-height: 100px; overflow-y: auto;
+            display: flex; flex-direction: column; gap: 2px;
+        }
+        #event-log::-webkit-scrollbar { width: 3px; }
+        #event-log::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 2px; }
+        .log-e {
+            font-size: 10.5px; padding: 2px 6px; border-radius: 4px;
+            border-left: 3px solid #333;
+            background: rgba(255,255,255,.025);
+            animation: fadeIn .25s ease;
+        }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(-3px)} to{opacity:1;transform:none} }
+        .log-e.ok     { border-color: #3fa; color: #9ef; }
+        .log-e.err    { border-color: #f44; color: #faa; }
+        .log-e.warn   { border-color: #fb3; color: #fda; }
+        .log-e.hand   { border-color: #a8f; color: #ccf; }
+        .log-e .ts    { color: #445; margin-right: 4px; font-size: 9.5px; }
+
+        /* ════════════════════════════════════
+           CLIENT BADGE  (top-right)
+        ════════════════════════════════════ */
+        #client-badge {
+            position: fixed; top: 14px; right: 14px;
+            background: rgba(5,7,18,.90); backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,.08); border-radius: 12px;
+            padding: 10px 16px; z-index: 30;
+            text-align: center;
+        }
+        #client-badge .lbl { font-size: 9.5px; color: #445; letter-spacing: .5px; }
+        #client-count {
+            font-size: 26px; font-weight: 700; color: #a8f;
+            line-height: 1.1; transition: transform .25s;
+        }
+        #client-count.bump { animation: bump .3s ease; }
+        @keyframes bump { 0%{transform:scale(1)} 50%{transform:scale(1.35)} 100%{transform:scale(1)} }
+
+        /* ════════════════════════════════════
+           TOAST NOTIFICATIONS  (bottom-right)
+        ════════════════════════════════════ */
+        #toasts {
+            position: fixed; bottom: 80px; right: 14px;
+            display: flex; flex-direction: column-reverse; gap: 8px;
+            z-index: 100; pointer-events: none; width: 290px;
+        }
+        .toast {
+            padding: 10px 14px; border-radius: 10px;
+            font-size: 12px; line-height: 1.5;
+            border-left: 4px solid #444;
+            background: rgba(6,8,22,.92); backdrop-filter: blur(10px);
+            animation: toastIn .35s cubic-bezier(.22,1,.36,1);
+            transition: opacity .35s, transform .35s;
+        }
+        .toast.out { opacity: 0; transform: translateX(24px); }
+        @keyframes toastIn { from{opacity:0;transform:translateX(24px)} to{opacity:1;transform:none} }
+        .toast.ok     { border-color: #3fa; }
+        .toast.err    { border-color: #f44; }
+        .toast.warn   { border-color: #fb3; }
+        .toast.hand   { border-color: #a8f; }
+        .toast.client { border-color: #8cf; }
+        .toast-ttl    { font-weight: 600; color: #ddf; font-size: 12.5px; }
+        .toast-body   { color: #778; font-size: 11px; margin-top: 2px; }
+
+        /* ════════════════════════════════════
+           HTTPS WARNING  (if served over http)
+        ════════════════════════════════════ */
+        #xr-warn {
+            display: none;
+            position: fixed; bottom: 80px; left: 14px;
+            background: rgba(180,80,0,.15); border: 1px solid rgba(220,100,0,.35);
+            border-radius: 10px; padding: 11px 15px;
+            font-size: 11.5px; color: #fc8; z-index: 30; max-width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <div id="meshcat-viewer"></div>
+
+    <!-- ── Status panel ─────────────────────── -->
+    <div id="panel">
+        <h2>🥽 MeshCat · Quest 3</h2>
+
+        <div class="info-row">
+            <span>Drake URL</span>
+            <span class="val" id="url-val">—</span>
+        </div>
+        <div class="info-row">
+            <span>Protocol</span>
+            <span class="val" id="proto-val">—</span>
+        </div>
+        <div class="info-row">
+            <span>Messages</span>
+            <span class="val"><span id="msg-count">0</span> msgs</span>
+        </div>
+        <div class="info-row">
+            <span>Uptime</span>
+            <span class="val" id="uptime-val">—</span>
+        </div>
+
+        <hr class="divider">
+
+        <!-- Drake status -->
+        <div id="drake-row">
+            <div id="drake-dot" class="connecting"></div>
+            <div id="drake-status-text">Connecting to Drake…</div>
+        </div>
+
+        <!-- Hand tracking badges -->
+        <div id="hand-row">
+            <div class="hand-badge" id="badge-left">
+                <div class="hname">LEFT</div>
+                <div id="left-status">—</div>
+            </div>
+            <div class="hand-badge" id="badge-right">
+                <div class="hname">RIGHT</div>
+                <div id="right-status">—</div>
+            </div>
+        </div>
+
+        <button id="btn-reconnect">🔄 Reconnect Drake</button>
+
+        <div id="log-title">EVENT LOG</div>
+        <div id="event-log"></div>
+    </div>
+
+    <!-- ── Client count ──────────────────────── -->
+    <div id="client-badge">
+        <div class="lbl">VIEWERS</div>
+        <div id="client-count">1</div>
+        <div class="lbl" id="client-lbl">tab</div>
+    </div>
+
+    <!-- ── Toasts ────────────────────────────── -->
+    <div id="toasts"></div>
+
+    <!-- ── HTTP warning ──────────────────────── -->
+    <div id="xr-warn">
+        ⚠️ <strong>HTTP detected.</strong> WebXR hand tracking requires HTTPS.<br>
+        Restart Vite with: <code>npm run dev</code> (without NOTLS=1)
+    </div>
+
+    <script type="module">
+        import { Viewer, THREE } from '../src/index.js';
+
+        /* ══════════════════════════════════════════════════════════════
+           UTILITIES
+        ══════════════════════════════════════════════════════════════ */
+        const $ = id => document.getElementById(id);
+
+        // Toast
+        function toast(kind, title, body, ms = 4500) {
+            const t = document.createElement('div');
+            t.className = `toast ${kind}`;
+            t.innerHTML = `<div class="toast-ttl">${title}</div>${body ? `<div class="toast-body">${body}</div>` : ''}`;
+            $('toasts').prepend(t);
+            setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 380); }, ms);
+        }
+
+        // Log entry
+        function addLog(kind, msg) {
+            const t = new Date().toLocaleTimeString();
+            const e = document.createElement('div');
+            e.className = `log-e ${kind}`;
+            e.innerHTML = `<span class="ts">${t}</span>${msg}`;
+            $('event-log').prepend(e);
+            while ($('event-log').children.length > 40) $('event-log').lastChild.remove();
+        }
+
+        // Drake status dot
+        function setDrakeStatus(cls, msg) {
+            $('drake-dot').className = cls;
+            $('drake-status-text').textContent = msg;
+        }
+
+        /* ══════════════════════════════════════════════════════════════
+           CLIENT TRACKER  — BroadcastChannel (tabs on same origin)
+        ══════════════════════════════════════════════════════════════ */
+        const MY_ID = crypto.randomUUID();
+        const peers = new Set([MY_ID]);
+        const bc = new BroadcastChannel('meshcat-xr-clients');
+
+        function refreshClientUI() {
+            const n = peers.size;
+            $('client-count').textContent = n;
+            $('client-lbl').textContent = n === 1 ? 'tab' : 'tabs';
+            $('client-count').classList.remove('bump');
+            void $('client-count').offsetWidth;
+            $('client-count').classList.add('bump');
+        }
+
+        bc.postMessage({ type: 'hello', id: MY_ID });
+
+        bc.addEventListener('message', ({ data }) => {
+            const { type, id } = data;
+            if (type === 'hello') {
+                if (!peers.has(id)) {
+                    peers.add(id);
+                    refreshClientUI();
+                    const msg = `${peers.size} viewer${peers.size > 1 ? 's' : ''} connected`;
+                    toast('client', '👁️ New Viewer', msg, 3000);
+                    addLog('hand', `👁️ New viewer tab (${peers.size} total)`);
+                }
+                bc.postMessage({ type: 'ack', id: MY_ID });
+            } else if (type === 'ack') {
+                if (!peers.has(id)) { peers.add(id); refreshClientUI(); }
+            } else if (type === 'bye') {
+                peers.delete(id); refreshClientUI();
+                addLog('warn', `👁️ Viewer tab closed (${peers.size} remaining)`);
+            }
+        });
+
+        window.addEventListener('beforeunload', () => bc.postMessage({ type: 'bye', id: MY_ID }));
+
+        /* ══════════════════════════════════════════════════════════════
+           BOOT
+        ══════════════════════════════════════════════════════════════ */
+        // Protocol check — Quest needs HTTPS for WebXR
+        const isHTTPS = location.protocol === 'https:';
+        $('proto-val').textContent = location.protocol;
+        if (!isHTTPS) {
+            $('xr-warn').style.display = 'block';
+            addLog('warn', '⚠️ HTTP mode: WebXR hand tracking unavailable');
+        }
+
+        // Drake WS URL (uses Vite proxy on HTTPS, direct on HTTP)
+        const DRAKE_RAW = 'ws://' + location.hostname + ':7000';
+        const DRAKE_URL = isHTTPS
+            ? 'wss://' + location.host + '/ws'  // routed via Vite proxy
+            : DRAKE_RAW;
+
+        $('url-val').textContent = isHTTPS ? DRAKE_RAW + ' (via proxy)' : DRAKE_RAW;
+
+        console.log('%c[Quest3] Boot', 'color:#8bceff;font-weight:bold');
+        console.log('  Protocol :', location.protocol);
+        console.log('  Drake raw:', DRAKE_RAW);
+        console.log('  Drake url:', DRAKE_URL, isHTTPS ? '← via Vite proxy' : '← direct');
+
+        /* ══════════════════════════════════════════════════════════════
+           VIEWER
+        ══════════════════════════════════════════════════════════════ */
+        document.addEventListener('DOMContentLoaded', () => {
+            const viewer = new Viewer($('meshcat-viewer'));
+
+            // ── Enable WebXR AR mode (creates the "Enter AR" button) ──
+            viewer.enable_webxr('ar');
+
+            // ── Patch _setStatus to drive our toasts + log ─────────────
+            let connectedAt = null;
+            const _orig = viewer._setStatus.bind(viewer);
+
+            viewer._setStatus = (text, color) => {
+                _orig(text, color);  // keep the floating badge from index.js
+
+                if (color === '#4f8') {
+                    // ── CONNECTED ──────────────────────────────────────
+                    setDrakeStatus('connected', 'Drake connected ✅');
+                    if (!connectedAt) {
+                        connectedAt = Date.now();
+                        toast('ok', '✅ Drake Connected!', DRAKE_RAW, 5000);
+                        addLog('ok', `✅ Drake connected → ${DRAKE_RAW}`);
+                        console.log('%c[Quest3] Drake CONNECTED', 'color:#3fa;font-weight:bold');
+                    }
+
+                } else if (color === '#f55') {
+                    // ── ERROR ──────────────────────────────────────────
+                    connectedAt = null;
+                    setDrakeStatus('error', 'Connection failed ❌');
+                    toast('err', '❌ Drake Error',
+                          'No response. Is franka_visualizer running?', 6000);
+                    addLog('err', `❌ Drake error — ${DRAKE_RAW}`);
+                    console.error('[Quest3] Drake ERROR', DRAKE_URL);
+
+                } else {
+                    // ── RECONNECTING ───────────────────────────────────
+                    const prev = connectedAt;
+                    connectedAt = null;
+                    setDrakeStatus('connecting', text.replace(/^[^\s]+ /, ''));
+                    if (prev) {
+                        const dur = ((Date.now() - prev) / 1000).toFixed(0);
+                        toast('warn', '🔴 Drake Disconnected',
+                              `Was up for ${dur}s. Reconnecting…`, 5000);
+                        addLog('warn', `🔴 Disconnected after ${dur}s`);
+                    } else {
+                        addLog('warn', `🔄 ${text}`);
+                    }
+                }
+                $('msg-count').textContent = viewer.num_messages_received;
+            };
+
+            // ── Live counters ──────────────────────────────────────────
+            setInterval(() => {
+                $('msg-count').textContent = viewer.num_messages_received;
+                if (connectedAt) {
+                    const s = Math.round((Date.now() - connectedAt) / 1000);
+                    $('uptime-val').textContent = `${s}s`;
+                }
+            }, 500);
+
+            // ── Hand tracking status (poll each animation frame) ───────
+            const _badgeLeft  = $('badge-left');
+            const _badgeRight = $('badge-right');
+            const _statusL    = $('left-status');
+            const _statusR    = $('right-status');
+            let _prevHandL    = false;
+            let _prevHandR    = false;
+
+            function pollHandStatus() {
+                const hc = viewer.xr_manager && viewer.xr_manager.handControls;
+                if (!hc) { requestAnimationFrame(pollHandStatus); return; }
+
+                // Use findHandInputSource to check real hand presence
+                const session = viewer.renderer.xr.getSession ? viewer.renderer.xr.getSession() : null;
+
+                let hasL = false, hasR = false;
+
+                if (session) {
+                    for (const src of session.inputSources) {
+                        if (src.hand) {
+                            if (src.handedness === 'left')  hasL = true;
+                            if (src.handedness === 'right') hasR = true;
+                        }
+                    }
+                }
+
+                // Left hand
+                if (hasL !== _prevHandL) {
+                    _prevHandL = hasL;
+                    _badgeLeft.classList.toggle('active', hasL);
+                    _statusL.textContent = hasL ? '🖐 tracked' : '—';
+                    if (hasL) {
+                        toast('hand', '🖐 Left Hand', 'Hand tracking started', 2500);
+                        addLog('hand', '🖐 Left hand detected');
+                    } else {
+                        addLog('warn', '🖐 Left hand lost');
+                    }
+                }
+
+                // Right hand
+                if (hasR !== _prevHandR) {
+                    _prevHandR = hasR;
+                    _badgeRight.classList.toggle('active', hasR);
+                    _statusR.textContent = hasR ? '🖐 tracked' : '—';
+                    if (hasR) {
+                        toast('hand', '🖐 Right Hand', 'Hand tracking started', 2500);
+                        addLog('hand', '🖐 Right hand detected');
+                    } else {
+                        addLog('warn', '🖐 Right hand lost');
+                    }
+                }
+
+                requestAnimationFrame(pollHandStatus);
+            }
+            requestAnimationFrame(pollHandStatus);
+
+            // ── Reconnect button ───────────────────────────────────────
+            $('btn-reconnect').addEventListener('click', () => {
+                addLog('warn', '🔄 Manual reconnect');
+                setDrakeStatus('connecting', 'Reconnecting…');
+                if (viewer.connection) {
+                    viewer.connection.onclose = null;
+                    viewer.connection.close();
+                }
+                viewer._drakeReconnectDelay = 1000;
+                viewer.connect(DRAKE_URL);
+            });
+
+            // ── Initial log ────────────────────────────────────────────
+            addLog('warn', `🔌 Connecting → ${DRAKE_RAW}`);
+            if (isHTTPS) addLog('warn', '🔒 Via Vite proxy (HTTPS mode)');
+
+            // ── Connect to Drake ───────────────────────────────────────
+            // viewer.connect() will auto-reroute to the proxy on HTTPS.
+            // We pass the raw URL here so the human-readable log shows the real target.
+            viewer.connect(DRAKE_URL);
+
+            // ── Camera start position ──────────────────────────────────
+            viewer.camera.position.set(1.5, 1, 1.5);
+            viewer.camera.lookAt(0, 0.5, 0);
+        });
+    </script>
+</body>
+</html>

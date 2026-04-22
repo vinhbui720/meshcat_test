@@ -1868,9 +1868,24 @@ class Viewer {
             url = "ws://" + window.location.hostname + ":7000";
         }
         
-        // Handle https -> wss conversion
-        if (location.protocol == "https:") {
-            url = url.replace("ws:", "wss:");
+        // ── HTTPS / Mixed-content fix ──────────────────────────────────────────
+        // Drake's Meshcat server only speaks plain ws://, NOT wss://.
+        // When the page is HTTPS (required for WebXR on Quest 3), a direct
+        // ws://localhost:7000 connection is blocked as "mixed content".
+        //
+        // Solution: route through the Vite dev-server proxy.
+        //   Browser  →  wss://localhost:5173/ws  (secure, same-origin)
+        //   Vite     →  ws://localhost:7000       (plain, server→Drake, no restriction)
+        //
+        // The proxy is configured in vite.config.js:  /ws → ws://localhost:7000
+        if (location.protocol === "https:") {
+            const proxyUrl = "wss://" + location.host + "/ws";
+            console.log(
+                `[MeshCat] 🔒 HTTPS detected. Routing Drake connection via Vite proxy.\n` +
+                `           ${url}  →  ${proxyUrl}\n` +
+                `           (Vite forwards server-side to ws://localhost:7000 → Drake)`
+            );
+            url = proxyUrl;
         }
 
         console.log("MeshCat connecting to:", url);
@@ -2037,65 +2052,30 @@ class Viewer {
         var original_update_projection_matrix = null;
         this.renderer.xr.addEventListener('sessionstart', () => {
             original_update_projection_matrix = this.camera.updateProjectionMatrix;
-            /* When the current session starts, we want the VR camera at the
-             position of the scene's camera but not exactly the same rotation.
-             We want it pointing along the same heading, but if the headset
-             is level, the camera should be looking in a direction parallel with
-             the world ground plane.
 
-             If the user has positioned the camera so it is looking up or down
-             at a significant angle, after switching to VR/AR mode, the user
-             will have to tilt their head up/down a comparable angle to
-             reproduce the equivalent view. */
-            /*
-            Note: Requesting an "AR" session does not guarantee an AR session will be initiated.
-            The request could automatically devolve to a VR session if AR isn’t fully supported on the system,
-            but VR is. There's potential for a discrepancy between the requested and the actual mode.
-            */
-            if (mode == "ar"){
+            if (mode == "ar") {
                 this.set_property(["Background"], "use_ar_background", true);
             }
             this.webxr_session_active = true;
-            console.info("Immersive session starting, controls are being removed.")
-            this.renderer.xr.getSession().requestReferenceSpace("local")
-                                         .then((refSpace) => {
-                let Cz_W = new THREE.Vector3();
-                Cz_W.setFromMatrixColumn(this.camera.matrixWorld, 2);
-                if (Math.abs(Cz_W.y) > 0.5) {
-                    console.warn("The view camera was pointed up or down a " +
-                                 "significant amount when entering XR mode. " +
-                                 "Tilt the headset the same amount to see " +
-                                 "the camera's original target.");
-                }
-                let heading_W = new THREE.Vector3(Cz_W.x, 0, Cz_W.z);
-                heading_W.normalize();
-                let Wz = new THREE.Vector3(0, 0, 1);
-                let quat_CW = new THREE.Quaternion();
-                quat_CW.setFromUnitVectors(heading_W, Wz);
+            console.info("[Viewer] Immersive XR session starting.");
 
-                /* This gets *initialized* as p_CW_W, we'll rotate it in place
-                 to make it *truly* p_CW_C. */
-                const p_CW_C = this.camera.position.clone().negate();
-                p_CW_C.applyQuaternion(quat_CW);
+            // Reference space alignment (Y-up WebXR → Z-up Drake) is now
+            // handled by XRManager.onSessionStart(), which attaches its own
+            // 'sessionstart' listener in xr-manager.js setupSessionHooks().
 
-                let transform = new XRRigidTransform(p_CW_C, quat_CW);
-                this.renderer.xr.setReferenceSpace(
-                    refSpace.getOffsetReferenceSpace(transform));
-            });
-
+            // Block orbit-controls from updating camera projection in XR.
             this.camera.updateProjectionMatrix = () => {
-                console.warn("Updating the camera projection matrix is disallowed in immersive mode.");
+                console.warn("Camera projection updates blocked in immersive mode.");
             };
         });
 
-        // Hide XR buttons if we are in Mock mode to avoid confusing "not available" messages
         if (this.xr_manager && this.xr_manager.desktopMock) {
-            this.update_webxr_buttons(); // Refresh UI
+            this.update_webxr_buttons();
         }
 
         this.renderer.xr.addEventListener('sessionend', () => {
             this.webxr_session_active = false;
-            if (mode == "ar"){
+            if (mode == "ar") {
                 this.set_property(["Background"], "use_ar_background", false);
             }
             this.camera.updateProjectionMatrix = original_update_projection_matrix;

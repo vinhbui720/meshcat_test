@@ -62,6 +62,11 @@
   resolved "https://registry.npmjs.org/@rollup/rollup-linux-x64-gnu/-/rollup-linux-x64-gnu-4.60.2.tgz"
   integrity sha512-UQjrkIdWrKI626Du8lCQ6MJp/6V1LAo2bOK9OTu4mSn8GGXIkPXk/Vsp4bLHCd9Z9Iz2OTEaokUE90VweJgIYQ==
 
+"@rollup/rollup-linux-x64-musl@4.60.2":
+  version "4.60.2"
+  resolved "https://registry.npmjs.org/@rollup/rollup-linux-x64-musl/-/rollup-linux-x64-musl-4.60.2.tgz"
+  integrity sha512-bTsRGj6VlSdn/XD4CGyzMnzaBs9bsRxy79eTqTCBsA8TMIEky7qg48aPkvJvFe1HyzQ5oMZdg7AnVlWQSKLTnw==
+
 "@types/eslint-scope@^3.7.3":
   version "3.7.7"
   resolved "https://registry.npmjs.org/@types/eslint-scope/-/eslint-scope-3.7.7.tgz"
@@ -293,8 +298,7 @@ caniuse-lite@^1.0.30001587:
 
 ccapture.js@aceslowman/ccapture.js#npm-fix:
   version "1.0.8"
-  resolved "https://codeload.github.com/aceslowman/ccapture.js/tar.gz/98b8046970c2bfbb25f749e732f196e15c3486fd"
-  integrity sha512-L6YfFPipkFM3gW9m1c7uToOFmfgzz5sUCMdxMkcfl+lL4Wum955zURE13b4QzSw4jdwR6knLM7qtfW/BzfjfTg==
+  resolved "git+ssh://git@github.com/aceslowman/ccapture.js.git#98b8046970c2bfbb25f749e732f196e15c3486fd"
 
 chalk@^5.3.0:
   version "5.3.0"
@@ -878,10 +882,25 @@ three-wtm@^1.0:
   dependencies:
     three "^0.133.1"
 
-three@^0.133.1, three@^0.176.0, three@~0.160.0, three@~0.163.0:
+three@^0.133.1:
+  version "0.133.1"
+  resolved "https://registry.npmjs.org/three/-/three-0.133.1.tgz"
+  integrity sha512-WydohO8ll949B0FTD6MGz59Yv2Lwj8hvObg/0Heh2r42S6+tQC1WByfCNRdmG4D7+odfGod+n8JPV1I2xrboWw==
+
+three@^0.176.0:
   version "0.176.0"
   resolved "https://registry.npmjs.org/three/-/three-0.176.0.tgz"
   integrity sha512-PWRKYWQo23ojf9oZSlRGH8K09q7nRSWx6LY/HF/UUrMdYgN9i1e2OwJYHoQjwc6HF/4lvvYLC5YC1X8UJL2ZpA==
+
+three@~0.160.0:
+  version "0.160.1"
+  resolved "https://registry.npmjs.org/three/-/three-0.160.1.tgz"
+  integrity sha512-Bgl2wPJypDOZ1stAxwfWAcJ0WQf7QzlptsxkjYiURPz+n5k4RBDLsq+6f9Y75TYxn6aHLcWz+JNmwTOXWrQTBQ==
+
+three@~0.163.0:
+  version "0.163.0"
+  resolved "https://registry.npmjs.org/three/-/three-0.163.0.tgz"
+  integrity sha512-HlMgCb2TF/dTLRtknBnjUTsR8FsDqBY43itYop2+Zg822I+Kd0Ua2vs8CvfBVefXkBdNDrLMoRTGCIIpfCuDew==
 
 undici-types@~5.26.4:
   version "5.26.5"
@@ -903,7 +922,7 @@ uri-js@^4.2.2:
   dependencies:
     punycode "^2.1.0"
 
-"vite@^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0", vite@^5.0.0:
+"vite@^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0", vite@^5.4.21:
   version "5.4.21"
   resolved "https://registry.npmjs.org/vite/-/vite-5.4.21.tgz"
   integrity sha512-o5a9xKjbtuhY6Bi5S3+HvbRERmouabWbyUcpXXUA1u+GNUKoROi9byOJ8M0nHbHYHkYICiMlqxkg1KkYmm25Sw==
